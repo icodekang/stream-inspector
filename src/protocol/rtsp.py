@@ -45,11 +45,8 @@ class RtspProtocol(StreamProtocol):
             f"User-Agent: StreamInspector/1.0\r\n"
             f"\r\n"
         )
-        self._debug("->", request)
         self.conn.send_rtsp(request)
         response = self.conn.recv_rtsp_message(timeout=10.0)
-        if response:
-            self._debug("<-", response.decode("utf-8", errors="replace"))
         return response.decode("utf-8", errors="replace") if response else None
 
     def describe(self) -> str | None:
@@ -65,12 +62,10 @@ class RtspProtocol(StreamProtocol):
             request += auth_header + "\r\n"
         request += "\r\n"
 
-        self._debug("->", request)
         self.conn.send_rtsp(request)
         response = self.conn.recv_rtsp_message(timeout=10.0)
         if response:
             resp_text = response.decode("utf-8", errors="replace")
-            self._debug("<-", resp_text)
 
             if not auth_header and re.search(r'\b401\b', resp_text.split("\r\n")[0]):
                 self._parse_auth_headers(resp_text)
@@ -96,12 +91,10 @@ class RtspProtocol(StreamProtocol):
             request += auth_header + "\r\n"
         request += "\r\n"
 
-        self._debug("->", request)
         self.conn.send_rtsp(request)
         response = self.conn.recv_rtsp_message(timeout=10.0)
         if response:
             resp_text = response.decode("utf-8", errors="replace")
-            self._debug("<-", resp_text)
 
             session_match = re.search(r"Session:\s*(\S+)", resp_text, re.IGNORECASE)
             if session_match:
@@ -123,11 +116,8 @@ class RtspProtocol(StreamProtocol):
             request += auth_header + "\r\n"
         request += "Range: npt=0.000-\r\n\r\n"
 
-        self._debug("->", request)
         self.conn.send_rtsp(request)
         response = self.conn.recv_rtsp_message(timeout=10.0)
-        if response:
-            self._debug("<-", response.decode("utf-8", errors="replace"))
         self._running = True
         return response is not None and b"200 OK" in response
 
@@ -142,7 +132,6 @@ class RtspProtocol(StreamProtocol):
             f"User-Agent: StreamInspector/1.0\r\n"
             f"\r\n"
         )
-        self._debug("->", request)
         try:
             self.conn.send_rtsp(request)
             response = self.conn.recv_rtsp_message(timeout=5.0)

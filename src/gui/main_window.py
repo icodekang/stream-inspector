@@ -304,33 +304,42 @@ class ProtocolWorker(QObject):
                 return
 
             tracks = self.protocol._parse_sdp(sdp)
-            video_track = next((t for t in tracks if t["media"] == "video"), None)
-            if video_track is None:
-                self.error_occurred.emit("未找到视频轨道")
+            media_track = next((t for t in tracks if t["media"] == "video"), None)
+            if media_track is None:
+                media_track = next((t for t in tracks if t["media"] == "audio"), None)
+            if media_track is None:
+                self.error_occurred.emit("未找到视频或音频轨道")
                 return
 
-            track_control = video_track.get("control", "")
+            track_control = media_track.get("control", "")
             if track_control.startswith("rtsp://"):
                 track_url = track_control
             else:
                 rtsp_base = getattr(self.protocol, '_rtsp_url', self.url)
                 track_url = rtsp_base.rstrip("/") + "/" + track_control.lstrip("/")
 
+            rtpmap = media_track.get("rtpmap", "")
+            codec_name = self._parse_codec_name(rtpmap)
+            is_audio = media_track.get("media") == "audio"
+
             self.stream_info.emit({
-                "codec": video_track.get("rtpmap", "H.264"),
+                "codec": rtpmap or "unknown",
                 "control": track_control,
             })
 
-            rtpmap = video_track.get("rtpmap", "")
-            self.codec_changed.emit(self._parse_codec_name(rtpmap))
+            rtp_ch = 0 if not is_audio else 2
+            rtcp_ch = 1 if not is_audio else 3
 
-            if not self.protocol.setup(track_url):
+            if not self.protocol.setup(track_url, rtp_ch, rtcp_ch):
                 self.error_occurred.emit("SETUP 失败")
                 return
 
             if not self.protocol.play():
                 self.error_occurred.emit("PLAY 失败")
                 return
+
+            if not is_audio:
+                self.codec_changed.emit(codec_name)
 
             self.protocol.receive_loop()
 
@@ -367,6 +376,12 @@ class ProtocolWorker(QObject):
             codec_part = parts[1].split("/")[0].lower()
             if codec_part in ("h265", "h.265", "hevc"):
                 return "hevc"
+            if codec_part in ("h264", "h.264"):
+                return "h264"
+            if codec_part in ("mpeg4-generic", "mpeg4", "aac", "mp4a"):
+                return "aac"
+            if codec_part in ("pcma", "pcmu"):
+                return codec_part
         return "h264"
 
 
