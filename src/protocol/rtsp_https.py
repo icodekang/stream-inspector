@@ -85,7 +85,7 @@ class RtspOverHttpsProtocol(StreamProtocol):
         self._debug("->", "[Base64] " + request.strip())
         resp_text = self._send_request(request)
         if resp_text:
-            if "401 Unauthorized" in resp_text and not auth_header:
+            if not auth_header and re.search(r'\b401\b', resp_text.split("\r\n")[0]):
                 self._parse_auth_headers(resp_text)
                 return self.describe()
         return resp_text
