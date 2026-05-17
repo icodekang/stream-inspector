@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build
+        run: pyinstaller --name "StreamInspector" --windowed --onefile main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StreamInspector-windows
+          path: dist/StreamInspector.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libopengl0
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build
+        run: pyinstaller --name "StreamInspector" --windowed --onefile main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StreamInspector-linux
+          path: dist/StreamInspector
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build
+        run: pyinstaller --name "StreamInspector" --windowed --onefile main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StreamInspector-macos
+          path: dist/StreamInspector
+
+  release:
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Prepare release assets
+        run: |
+          mv StreamInspector-windows/StreamInspector.exe StreamInspector-v1.0.0-windows.exe
+          mv StreamInspector-linux/StreamInspector StreamInspector-v1.0.0-linux
+          mv StreamInspector-macos/StreamInspector StreamInspector-v1.0.0-macos
+          chmod +x StreamInspector-v1.0.0-linux StreamInspector-v1.0.0-macos
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v1.0.0
+          body: |
+            ## Stream Inspector v1.0.0
+
+            首个正式版本，支持 RTSP / RTSP over HTTP / RTSP over HTTPS 协议视频流抓包分析。
+
+            ### 功能
+            - 标准 RTSP (端口 554)
+            - RTSP over HTTP 隧道 (rtsph://)
+            - RTSP over HTTPS 隧道 (rtsps://)
+            - Digest 认证自动重试
+            - H.264 视频解码播放
+            - 协议报文实时抓包展示
+            - 深色主题 UI
+
+            ### 下载
+            - `StreamInspector-v1.0.0-windows.exe`
+            - `StreamInspector-v1.0.0-linux`
+            - `StreamInspector-v1.0.0-macos`
+          files: |
+            StreamInspector-v1.0.0-windows.exe
+            StreamInspector-v1.0.0-linux
+            StreamInspector-v1.0.0-macos
