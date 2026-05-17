@@ -113,14 +113,10 @@ class RtspOverHttpsProtocol(StreamProtocol):
             session_match = re.search(r"Session:\s*(\S+)", resp_text, re.IGNORECASE)
             if session_match:
                 self._session = session_match.group(1).rstrip(";")
-            self._has_mode_play = 'mode="play"' in resp_text.lower()
             return "200 OK" in resp_text
         return False
 
     def play(self) -> bool:
-        if getattr(self, '_has_mode_play', False):
-            self._running = True
-            return True
         cseq = self._next_cseq()
         request = (
             f"PLAY {self._rtsp_url} RTSP/1.0\r\n"
@@ -131,9 +127,9 @@ class RtspOverHttpsProtocol(StreamProtocol):
             f"\r\n"
         )
         self._debug("->", "[Base64] " + request.strip())
-        resp_text = self._send_request(request)
+        self.tunnel.send_rtsp(request)
         self._running = True
-        return resp_text is not None and "200 OK" in resp_text
+        return True
 
     def teardown(self):
         if not self.tunnel or not self.tunnel.is_connected():
@@ -154,6 +150,7 @@ class RtspOverHttpsProtocol(StreamProtocol):
 
     def receive_loop(self):
         self._rtp_count = 0
+        idle = 0
         while self._running:
             try:
                 if not self.tunnel or not self.tunnel.is_connected():
@@ -161,7 +158,11 @@ class RtspOverHttpsProtocol(StreamProtocol):
                 self.tunnel.set_timeout(1.0)
                 result = self.tunnel.recv_message(timeout=1.0)
                 if result is None:
+                    idle += 1
+                    if idle >= 10:
+                        break
                     continue
+                idle = 0
                 if isinstance(result, tuple):
                     channel, data = result
                     if channel == self.rtp_channel:

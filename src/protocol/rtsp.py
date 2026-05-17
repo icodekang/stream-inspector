@@ -106,15 +106,10 @@ class RtspProtocol(StreamProtocol):
             if session_match:
                 self._session = session_match.group(1).rstrip(";")
 
-            self._has_mode_play = 'mode="play"' in resp_text.lower()
-
             return "200 OK" in resp_text
         return False
 
     def play(self) -> bool:
-        if getattr(self, '_has_mode_play', False):
-            self._running = True
-            return True
         cseq = self._next_cseq()
         auth_header = self._build_auth_header("PLAY")
         request = (
@@ -129,11 +124,8 @@ class RtspProtocol(StreamProtocol):
 
         self._debug("->", request)
         self.conn.send_rtsp(request)
-        response = self.conn.recv_rtsp_message(timeout=10.0)
-        if response:
-            self._debug("<-", response.decode("utf-8", errors="replace"))
         self._running = True
-        return response is not None and b"200 OK" in response
+        return True
 
     def teardown(self):
         if not self.conn or not self.conn.is_connected():
@@ -158,10 +150,15 @@ class RtspProtocol(StreamProtocol):
     def receive_loop(self):
         self.conn.set_timeout(1.0)
         self._rtp_count = 0
+        idle = 0
         while self._running:
             result = self.conn.recv_message(timeout=1.0)
             if result is None:
+                idle += 1
+                if idle >= 10:
+                    break
                 continue
+            idle = 0
             if isinstance(result, tuple):
                 channel, data = result
                 if channel == self.rtp_channel:
