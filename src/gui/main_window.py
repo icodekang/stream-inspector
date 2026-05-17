@@ -313,7 +313,8 @@ class ProtocolWorker(QObject):
             if track_control.startswith("rtsp://"):
                 track_url = track_control
             else:
-                track_url = self.url.rstrip("/") + "/" + track_control.lstrip("/")
+                rtsp_base = getattr(self.protocol, '_rtsp_url', self.url)
+                track_url = rtsp_base.rstrip("/") + "/" + track_control.lstrip("/")
 
             self.stream_info.emit({
                 "codec": video_track.get("rtpmap", "H.264"),
