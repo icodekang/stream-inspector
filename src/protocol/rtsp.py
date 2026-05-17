@@ -134,9 +134,7 @@ class RtspProtocol(StreamProtocol):
         )
         try:
             self.conn.send_rtsp(request)
-            response = self.conn.recv_rtsp_message(timeout=5.0)
-            if response:
-                self._debug("<-", response.decode("utf-8", errors="replace"))
+            self.conn.recv_rtsp_message(timeout=5.0)
         except Exception as e:
             self._debug("<-", f"[TEARDOWN error: {e}]")
 
