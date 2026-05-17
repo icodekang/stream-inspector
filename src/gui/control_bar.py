@@ -62,8 +62,9 @@ class ControlBar(QWidget):
 
         self.addr_combo.currentTextChanged.connect(self._on_address_changed)
 
-        self.add_btn = QPushButton("+ 添加")
+        self.add_btn = QPushButton("管理")
         self.add_btn.setObjectName("addButton")
+        self.add_btn.setFixedWidth(80)
         self.add_btn.clicked.connect(self._open_manager)
 
         addr_layout.addWidget(addr_label)
@@ -86,10 +87,12 @@ class ControlBar(QWidget):
 
         self.connect_btn = QPushButton("▶ 连接")
         self.connect_btn.setObjectName("connectButton")
+        self.connect_btn.setFixedWidth(80)
         self.connect_btn.clicked.connect(self._on_connect)
 
         self.disconnect_btn = QPushButton("■ 断开")
         self.disconnect_btn.setObjectName("disconnectButton")
+        self.disconnect_btn.setFixedWidth(80)
         self.disconnect_btn.clicked.connect(self._on_disconnect)
         self.disconnect_btn.setVisible(False)
 
@@ -206,12 +209,17 @@ class AddressManagerDialog(QDialog):
         self.new_addr_input.setPlaceholderText("输入新地址，如 rtsp://192.168.1.100:554/stream")
         self.new_addr_input.returnPressed.connect(self._add_item)
 
-        add_item_btn = QPushButton("+ 添加")
+        add_item_btn = QPushButton("添加")
         add_item_btn.setObjectName("addButton")
         add_item_btn.clicked.connect(self._add_item)
 
+        del_item_btn = QPushButton("删除")
+        del_item_btn.setObjectName("disconnectButton")
+        del_item_btn.clicked.connect(self._delete_item)
+
         add_layout.addWidget(self.new_addr_input, 1)
         add_layout.addWidget(add_item_btn)
+        add_layout.addWidget(del_item_btn)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok |
                                      QDialogButtonBox.StandardButton.Cancel)
@@ -238,6 +246,12 @@ class AddressManagerDialog(QDialog):
             self._refresh_list()
             self.new_addr_input.clear()
         self.new_addr_input.setFocus()
+
+    def _delete_item(self):
+        current = self.list_widget.currentItem()
+        if current:
+            self._addresses.remove(current.text())
+            self._refresh_list()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key.Key_Delete:

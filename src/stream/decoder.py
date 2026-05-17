@@ -5,12 +5,17 @@ from PyQt6.QtGui import QImage, QPixmap
 
 class VideoDecoder:
     def __init__(self):
+        self._codec_name = "h264"
         self.codec = None
         self._init_codec()
 
+    def set_codec(self, codec_name: str):
+        self._codec_name = codec_name
+        self.reset()
+
     def _init_codec(self):
         try:
-            self.codec = av.CodecContext.create("h264", "r")
+            self.codec = av.CodecContext.create(self._codec_name, "r")
         except Exception:
             self.codec = None
 

@@ -1,6 +1,7 @@
 import re
 import hashlib
 from ..transport.connection import Connection
+from ..stream.rtp_parser import RtpParser
 from .base import StreamProtocol
 
 
@@ -16,13 +17,13 @@ class RtspProtocol(StreamProtocol):
         self.auth_realm = ""
         self.auth_nonce = ""
         self.auth_qop = None
+        self._rtp_count = 0
 
     def connect(self) -> bool:
         self._status("connecting")
         self.conn = Connection(
             debug_send_cb=lambda d: self._debug("->", d.decode("utf-8", errors="replace")),
             debug_recv_cb=lambda d: self._debug("<-", d.decode("utf-8", errors="replace")),
-            debug_binary_recv_cb=lambda s: self._debug("<-", f"[RTP interleaved: {s} bytes]"),
         )
         self.conn.connect(self.host, self.port, use_tls=False)
         self._status("connected")
@@ -151,6 +152,7 @@ class RtspProtocol(StreamProtocol):
 
     def receive_loop(self):
         self.conn.set_timeout(1.0)
+        self._rtp_count = 0
         while self._running:
             result = self.conn.recv_message(timeout=1.0)
             if result is None:
@@ -158,6 +160,7 @@ class RtspProtocol(StreamProtocol):
             if isinstance(result, tuple):
                 channel, data = result
                 if channel == self.rtp_channel:
+                    self._log_rtp(data)
                     self._video(data)
             else:
                 if isinstance(result, bytes):
@@ -166,6 +169,16 @@ class RtspProtocol(StreamProtocol):
 
     def stop(self):
         self._running = False
+
+    def _log_rtp(self, data: bytes):
+        self._rtp_count += 1
+        info = RtpParser.parse_header(data)
+        if info is None:
+            return
+        self._debug("<-", f"[RTP #{self._rtp_count}] seq={info['seq']} len={len(data)} "
+                          f"ts={info['ts']} pt={info['payload_type']} "
+                          f"ssrc=0x{info['ssrc']:08X} marker={info['marker']} "
+                          f"payload={info['payload_len']}B")
 
     def _build_auth_header(self, method: str) -> str:
         if self.auth_realm and self.auth_nonce and self.username and self.password:

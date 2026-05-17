@@ -1,6 +1,7 @@
 import re
 import hashlib
 from ..transport.http_tunnel import HttpTunnel
+from ..stream.rtp_parser import RtpParser
 from .base import StreamProtocol
 
 
@@ -16,6 +17,7 @@ class RtspOverHttpProtocol(StreamProtocol):
         self.auth_realm = ""
         self.auth_nonce = ""
         self.auth_qop = None
+        self._rtp_count = 0
         self.tunnel_path = self.parsed.path or "/"
         rtsp_port = self.parsed.port if self.parsed.port and self.parsed.port != 80 else 554
         self._rtsp_url = f"rtsp://{self.host}:{rtsp_port}{self.tunnel_path}"
@@ -29,7 +31,6 @@ class RtspOverHttpProtocol(StreamProtocol):
                 self.host, self.port, self.tunnel_path, use_tls=False,
                 debug_send_cb=lambda d: self._debug("->", d.decode("utf-8", errors="replace")),
                 debug_recv_cb=lambda d: self._debug("<-", d.decode("utf-8", errors="replace")),
-                debug_binary_recv_cb=lambda s: self._debug("<-", f"[RTP interleaved: {s} bytes]"),
             )
         except Exception as e:
             self._debug("<-", f"[Tunnel establish error: {e}]")
@@ -146,6 +147,7 @@ class RtspOverHttpProtocol(StreamProtocol):
             pass
 
     def receive_loop(self):
+        self._rtp_count = 0
         while self._running:
             try:
                 if not self.tunnel or not self.tunnel.is_connected():
@@ -157,6 +159,7 @@ class RtspOverHttpProtocol(StreamProtocol):
                 if isinstance(result, tuple):
                     channel, data = result
                     if channel == self.rtp_channel:
+                        self._log_rtp(data)
                         self._video(data)
             except Exception:
                 import time
@@ -164,6 +167,16 @@ class RtspOverHttpProtocol(StreamProtocol):
 
     def stop(self):
         self._running = False
+
+    def _log_rtp(self, data: bytes):
+        self._rtp_count += 1
+        info = RtpParser.parse_header(data)
+        if info is None:
+            return
+        self._debug("<-", f"[RTP #{self._rtp_count}] seq={info['seq']} len={len(data)} "
+                          f"ts={info['ts']} pt={info['payload_type']} "
+                          f"ssrc=0x{info['ssrc']:08X} marker={info['marker']} "
+                          f"payload={info['payload_len']}B")
 
     def _build_auth_header(self, method: str) -> str:
         if self.auth_realm and self.auth_nonce and self.username and self.password:

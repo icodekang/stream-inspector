@@ -1,12 +1,12 @@
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                              QSplitter, QLabel, QStatusBar, QApplication)
+                               QSplitter, QLabel, QApplication)
 from PyQt6.QtCore import Qt, QObject, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QPixmap
 
 from .video_panel import VideoPanel
 from .debug_panel import DebugPanel
 from .control_bar import ControlBar
-from ..protocol.factory import create_protocol, get_protocol_name
+from ..protocol.factory import create_protocol
 from ..stream.rtp_parser import RtpParser
 from ..stream.decoder import VideoDecoder
 
@@ -164,12 +164,6 @@ QCheckBox::indicator:checked {
     color: #8890b0;
     border-top: 1px solid #3a3b50;
 }
-QStatusBar {
-    background-color: #1e1f35;
-    color: #8890b0;
-    border-top: 1px solid #3a3b50;
-    padding: 2px 8px;
-}
 QScrollBar:vertical {
     background-color: #1a1b2e;
     width: 8px;
@@ -273,6 +267,7 @@ class ProtocolWorker(QObject):
     video_data = pyqtSignal(bytes)
     status_changed = pyqtSignal(str)
     stream_info = pyqtSignal(dict)
+    codec_changed = pyqtSignal(str)
     finished = pyqtSignal()
     error_occurred = pyqtSignal(str)
 
@@ -315,12 +310,18 @@ class ProtocolWorker(QObject):
                 return
 
             track_control = video_track.get("control", "")
-            track_url = self.url.rstrip("/") + "/" + track_control.lstrip("/")
+            if track_control.startswith("rtsp://"):
+                track_url = track_control
+            else:
+                track_url = self.url.rstrip("/") + "/" + track_control.lstrip("/")
 
             self.stream_info.emit({
                 "codec": video_track.get("rtpmap", "H.264"),
                 "control": track_control,
             })
+
+            rtpmap = video_track.get("rtpmap", "")
+            self.codec_changed.emit(self._parse_codec_name(rtpmap))
 
             if not self.protocol.setup(track_url):
                 self.error_occurred.emit("SETUP 失败")
@@ -363,6 +364,15 @@ class ProtocolWorker(QObject):
                 pass
             self.protocol = None
 
+    @staticmethod
+    def _parse_codec_name(rtpmap: str) -> str:
+        parts = rtpmap.split()
+        if len(parts) >= 2:
+            codec_part = parts[1].split("/")[0].lower()
+            if codec_part in ("h265", "h.265", "hevc"):
+                return "hevc"
+        return "h264"
+
 
 class DecodeWorker(QObject):
     frame_ready = pyqtSignal(QPixmap)
@@ -372,6 +382,11 @@ class DecodeWorker(QObject):
         self.parser = RtpParser()
         self.decoder = VideoDecoder()
         self._running = False
+
+    @pyqtSlot(str)
+    def set_codec(self, codec_name: str):
+        self.parser.set_codec(codec_name)
+        self.decoder.set_codec(codec_name)
 
     @pyqtSlot(bytes)
     def process_data(self, data: bytes):
@@ -440,20 +455,6 @@ class MainWindow(QMainWindow):
 
         main_layout.addWidget(splitter, 1)
 
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_label = QLabel("未连接")
-        self.protocol_label = QLabel("")
-        self.resolution_label = QLabel("")
-        self.fps_label = QLabel("")
-        self.bitrate_label = QLabel("")
-
-        self.status_bar.addWidget(self.status_label)
-        self.status_bar.addWidget(self.protocol_label)
-        self.status_bar.addWidget(self.resolution_label)
-        self.status_bar.addWidget(self.fps_label)
-        self.status_bar.addWidget(self.bitrate_label)
-
     def _apply_theme(self):
         self.setStyleSheet(DARK_THEME)
 
@@ -464,12 +465,6 @@ class MainWindow(QMainWindow):
         self.debug_panel.clear()
         self.debug_panel.append_info(f"开始连接: {url}")
         self.video_panel.set_connecting()
-
-        scheme = url.split("://")[0].lower()
-        proto_name = get_protocol_name(scheme)
-        self.protocol_label.setText(f"|  {proto_name}")
-        self.status_label.setText("连接中...")
-        self.status_label.setStyleSheet("color: #f0c060;")
 
         self.control_bar.set_connecting()
 
@@ -490,6 +485,7 @@ class MainWindow(QMainWindow):
         self._decode_worker.moveToThread(self._decode_thread)
 
         self._protocol_worker.video_data.connect(self._decode_worker.process_data)
+        self._protocol_worker.codec_changed.connect(self._decode_worker.set_codec)
         self._decode_worker.frame_ready.connect(self._on_frame_ready)
 
         self._protocol_thread.start()
@@ -520,7 +516,6 @@ class MainWindow(QMainWindow):
     def _on_stream_info(self, info: dict):
         codec = info.get("codec", "H.264")
         self.video_panel.set_codec(codec)
-        self.resolution_label.setText(f"|  {codec}")
 
     def _on_frame_ready(self, pixmap: QPixmap):
         self.video_panel.show_frame(pixmap)
@@ -540,9 +535,5 @@ class MainWindow(QMainWindow):
         self._decode_thread = None
 
         self.control_bar.set_disconnected()
-        self.status_label.setText("未连接")
-        self.status_label.setStyleSheet("color: #8890b0;")
-        self.protocol_label.setText("")
-        self.resolution_label.setText("")
         self.video_panel.set_waiting()
         self.debug_panel.append_info("已断开连接")
