@@ -73,7 +73,7 @@ class HttpTunnel:
         return HttpTunnel(get_conn, post_conn, session_cookie, path, host, port)
 
     def send_rtsp(self, rtsp_message: str):
-        encoded = base64.b64encode(rtsp_message.encode("utf-8")).decode("ascii")
+        encoded = base64.b64encode(rtsp_message.encode("utf-8")).decode("ascii") + "\r\n"
         self.post_conn.send_raw(encoded.encode("utf-8"))
 
     def recv_rtsp_response(self, timeout: float = None) -> bytes | None:
