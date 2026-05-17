@@ -111,10 +111,15 @@ class RtspOverHttpProtocol(StreamProtocol):
             session_match = re.search(r"Session:\s*(\S+)", resp_text, re.IGNORECASE)
             if session_match:
                 self._session = session_match.group(1).rstrip(";")
+            if 'mode="play"' in resp_text.lower():
+                self._auto_play = True
             return "200 OK" in resp_text
         return False
 
     def play(self) -> bool:
+        if getattr(self, '_auto_play', False):
+            self._running = True
+            return True
         cseq = self._next_cseq()
         request = (
             f"PLAY {self._rtsp_url} RTSP/1.0\r\n"
