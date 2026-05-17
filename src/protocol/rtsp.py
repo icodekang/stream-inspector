@@ -15,6 +15,7 @@ class RtspProtocol(StreamProtocol):
         self.rtcp_channel = 1
         self.auth_realm = ""
         self.auth_nonce = ""
+        self.auth_qop = None
 
     def connect(self) -> bool:
         self._status("connecting")
@@ -171,29 +172,42 @@ class RtspProtocol(StreamProtocol):
             ha1 = hashlib.md5(
                 f"{self.username}:{self.auth_realm}:{self.password}".encode()
             ).hexdigest()
-            uri = self.parsed.path or "/"
-            if self.parsed.query:
-                uri += "?" + self.parsed.query
+            uri = self.url
             ha2 = hashlib.md5(f"{method}:{uri}".encode()).hexdigest()
-            cnonce = hashlib.md5(str(self._cseq).encode()).hexdigest()[:16]
-            response_val = hashlib.md5(
-                f"{ha1}:{self.auth_nonce}:{self._cseq}:{cnonce}:auth:{ha2}".encode()
-            ).hexdigest()
-            return (
-                f'Authorization: Digest username="{self.username}", '
-                f'realm="{self.auth_realm}", '
-                f'nonce="{self.auth_nonce}", '
-                f'uri="{uri}", '
-                f'response="{response_val}", '
-                f'cnonce="{cnonce}", '
-                f'nc=00000001, '
-                f'qop=auth'
-            )
+
+            if self.auth_qop:
+                cnonce = hashlib.md5(str(self._cseq).encode()).hexdigest()[:16]
+                response_val = hashlib.md5(
+                    f"{ha1}:{self.auth_nonce}:{self._cseq}:{cnonce}:{self.auth_qop}:{ha2}".encode()
+                ).hexdigest()
+                return (
+                    f'Authorization: Digest username="{self.username}", '
+                    f'realm="{self.auth_realm}", '
+                    f'nonce="{self.auth_nonce}", '
+                    f'uri="{uri}", '
+                    f'response="{response_val}", '
+                    f'cnonce="{cnonce}", '
+                    f'nc=00000001, '
+                    f'qop={self.auth_qop}'
+                )
+            else:
+                response_val = hashlib.md5(
+                    f"{ha1}:{self.auth_nonce}:{ha2}".encode()
+                ).hexdigest()
+                return (
+                    f'Authorization: Digest username="{self.username}", '
+                    f'realm="{self.auth_realm}", '
+                    f'nonce="{self.auth_nonce}", '
+                    f'uri="{uri}", '
+                    f'response="{response_val}"'
+                )
         return ""
 
     def _parse_auth_headers(self, resp: str):
         realm_match = re.search(r'realm="([^"]+)"', resp)
         nonce_match = re.search(r'nonce="([^"]+)"', resp)
+        qop_match = re.search(r'qop="?([^",\s]+)"?', resp, re.IGNORECASE)
         if realm_match and nonce_match:
             self.auth_realm = realm_match.group(1)
             self.auth_nonce = nonce_match.group(1)
+            self.auth_qop = qop_match.group(1) if qop_match else None

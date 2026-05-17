@@ -1,6 +1,5 @@
 import re
 import hashlib
-from ..transport.connection import Connection
 from ..transport.http_tunnel import HttpTunnel
 from .base import StreamProtocol
 
@@ -11,24 +10,27 @@ class RtspOverHttpProtocol(StreamProtocol):
         super().__init__(url)
         if self.port is None:
             self.port = 80
-        self.conn = None
         self.tunnel = None
         self.rtp_channel = 0
         self.rtcp_channel = 1
         self.auth_realm = ""
         self.auth_nonce = ""
+        self.auth_qop = None
         self.tunnel_path = self.parsed.path or "/"
+        rtsp_port = self.parsed.port if self.parsed.port and self.parsed.port != 80 else 554
+        self._rtsp_url = f"rtsp://{self.host}:{rtsp_port}{self.tunnel_path}"
+        if self.parsed.query:
+            self._rtsp_url += f"?{self.parsed.query}"
 
     def connect(self) -> bool:
         self._status("connecting")
-        self.conn = Connection(
-            debug_send_cb=lambda d: self._debug("->", d.decode("utf-8", errors="replace")),
-            debug_recv_cb=lambda d: self._debug("<-", d.decode("utf-8", errors="replace")),
-            debug_binary_recv_cb=lambda s: self._debug("<-", f"[RTP interleaved: {s} bytes]"),
-        )
-        self.tunnel = HttpTunnel(self.conn)
         try:
-            self.tunnel.establish(self.host, self.port, self.tunnel_path, use_tls=False)
+            self.tunnel = HttpTunnel.establish(
+                self.host, self.port, self.tunnel_path, use_tls=False,
+                debug_send_cb=lambda d: self._debug("->", d.decode("utf-8", errors="replace")),
+                debug_recv_cb=lambda d: self._debug("<-", d.decode("utf-8", errors="replace")),
+                debug_binary_recv_cb=lambda s: self._debug("<-", f"[RTP interleaved: {s} bytes]"),
+            )
         except Exception as e:
             self._debug("<-", f"[Tunnel establish error: {e}]")
             self._status("error")
@@ -41,16 +43,14 @@ class RtspOverHttpProtocol(StreamProtocol):
         if self.tunnel:
             self.tunnel.disconnect()
             self.tunnel = None
-            self.conn = None
         self._status("disconnected")
 
     def _send_request(self, request: str) -> str | None:
         try:
-            response = self.tunnel.send_rtsp(request)
+            self.tunnel.send_rtsp(request)
+            response = self.tunnel.recv_rtsp_response(timeout=10.0)
             if response:
-                resp_text = response.decode("utf-8", errors="replace")
-                self._debug("<-", "[Base64] " + resp_text.strip())
-                return resp_text
+                return response.decode("utf-8", errors="replace")
         except Exception as e:
             self._debug("<-", f"[Request error: {e}]")
         return None
@@ -58,7 +58,7 @@ class RtspOverHttpProtocol(StreamProtocol):
     def options(self) -> str | None:
         cseq = self._next_cseq()
         request = (
-            f"OPTIONS {self.url} RTSP/1.0\r\n"
+            f"OPTIONS {self._rtsp_url} RTSP/1.0\r\n"
             f"CSeq: {cseq}\r\n"
             f"User-Agent: StreamInspector/1.0\r\n"
             f"\r\n"
@@ -70,7 +70,7 @@ class RtspOverHttpProtocol(StreamProtocol):
         cseq = self._next_cseq()
         auth_header = self._build_auth_header("DESCRIBE")
         request = (
-            f"DESCRIBE {self.url} RTSP/1.0\r\n"
+            f"DESCRIBE {self._rtsp_url} RTSP/1.0\r\n"
             f"CSeq: {cseq}\r\n"
             f"Accept: application/sdp\r\n"
             f"User-Agent: StreamInspector/1.0\r\n"
@@ -116,7 +116,7 @@ class RtspOverHttpProtocol(StreamProtocol):
     def play(self) -> bool:
         cseq = self._next_cseq()
         request = (
-            f"PLAY {self.url} RTSP/1.0\r\n"
+            f"PLAY {self._rtsp_url} RTSP/1.0\r\n"
             f"CSeq: {cseq}\r\n"
             f"Session: {self._session or ''}\r\n"
             f"User-Agent: StreamInspector/1.0\r\n"
@@ -133,7 +133,7 @@ class RtspOverHttpProtocol(StreamProtocol):
             return
         cseq = self._next_cseq()
         request = (
-            f"TEARDOWN {self.url} RTSP/1.0\r\n"
+            f"TEARDOWN {self._rtsp_url} RTSP/1.0\r\n"
             f"CSeq: {cseq}\r\n"
             f"Session: {self._session or ''}\r\n"
             f"User-Agent: StreamInspector/1.0\r\n"
@@ -151,17 +151,13 @@ class RtspOverHttpProtocol(StreamProtocol):
                 if not self.tunnel or not self.tunnel.is_connected():
                     break
                 self.tunnel.set_timeout(1.0)
-                result = self.tunnel.conn.recv_message(timeout=1.0)
+                result = self.tunnel.recv_message(timeout=1.0)
                 if result is None:
                     continue
                 if isinstance(result, tuple):
                     channel, data = result
                     if channel == self.rtp_channel:
                         self._video(data)
-                else:
-                    if isinstance(result, bytes):
-                        text = result.decode("utf-8", errors="replace")
-                        self._debug("<-", text)
             except Exception:
                 import time
                 time.sleep(0.1)
@@ -174,29 +170,42 @@ class RtspOverHttpProtocol(StreamProtocol):
             ha1 = hashlib.md5(
                 f"{self.username}:{self.auth_realm}:{self.password}".encode()
             ).hexdigest()
-            uri = self.parsed.path or "/"
-            if self.parsed.query:
-                uri += "?" + self.parsed.query
+            uri = self._rtsp_url
             ha2 = hashlib.md5(f"{method}:{uri}".encode()).hexdigest()
-            cnonce = hashlib.md5(str(self._cseq).encode()).hexdigest()[:16]
-            response_val = hashlib.md5(
-                f"{ha1}:{self.auth_nonce}:{self._cseq}:{cnonce}:auth:{ha2}".encode()
-            ).hexdigest()
-            return (
-                f'Authorization: Digest username="{self.username}", '
-                f'realm="{self.auth_realm}", '
-                f'nonce="{self.auth_nonce}", '
-                f'uri="{uri}", '
-                f'response="{response_val}", '
-                f'cnonce="{cnonce}", '
-                f'nc=00000001, '
-                f'qop=auth'
-            )
+
+            if self.auth_qop:
+                cnonce = hashlib.md5(str(self._cseq).encode()).hexdigest()[:16]
+                response_val = hashlib.md5(
+                    f"{ha1}:{self.auth_nonce}:{self._cseq}:{cnonce}:{self.auth_qop}:{ha2}".encode()
+                ).hexdigest()
+                return (
+                    f'Authorization: Digest username="{self.username}", '
+                    f'realm="{self.auth_realm}", '
+                    f'nonce="{self.auth_nonce}", '
+                    f'uri="{uri}", '
+                    f'response="{response_val}", '
+                    f'cnonce="{cnonce}", '
+                    f'nc=00000001, '
+                    f'qop={self.auth_qop}'
+                )
+            else:
+                response_val = hashlib.md5(
+                    f"{ha1}:{self.auth_nonce}:{ha2}".encode()
+                ).hexdigest()
+                return (
+                    f'Authorization: Digest username="{self.username}", '
+                    f'realm="{self.auth_realm}", '
+                    f'nonce="{self.auth_nonce}", '
+                    f'uri="{uri}", '
+                    f'response="{response_val}"'
+                )
         return ""
 
     def _parse_auth_headers(self, resp: str):
         realm_match = re.search(r'realm="([^"]+)"', resp)
         nonce_match = re.search(r'nonce="([^"]+)"', resp)
+        qop_match = re.search(r'qop="?([^",\s]+)"?', resp, re.IGNORECASE)
         if realm_match and nonce_match:
             self.auth_realm = realm_match.group(1)
             self.auth_nonce = nonce_match.group(1)
+            self.auth_qop = qop_match.group(1) if qop_match else None
