@@ -180,7 +180,6 @@ class ControlBar(QWidget):
         self.addr_combo.setEnabled(True)
         self.add_btn.setEnabled(True)
         self.status_text.setText("未连接")
-        self.protocol_label.setText("协议: 自动识别")
 
     def current_url(self) -> str:
         return self.addr_combo.currentText().strip()

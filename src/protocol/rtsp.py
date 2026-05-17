@@ -105,14 +105,14 @@ class RtspProtocol(StreamProtocol):
             session_match = re.search(r"Session:\s*(\S+)", resp_text, re.IGNORECASE)
             if session_match:
                 self._session = session_match.group(1).rstrip(";")
-            if 'mode="play"' in resp_text.lower():
-                self._auto_play = True
+
+            self._has_mode_play = 'mode="play"' in resp_text.lower()
 
             return "200 OK" in resp_text
         return False
 
     def play(self) -> bool:
-        if getattr(self, '_auto_play', False):
+        if getattr(self, '_has_mode_play', False):
             self._running = True
             return True
         cseq = self._next_cseq()
