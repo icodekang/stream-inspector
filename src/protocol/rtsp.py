@@ -124,8 +124,11 @@ class RtspProtocol(StreamProtocol):
 
         self._debug("->", request)
         self.conn.send_rtsp(request)
+        response = self.conn.recv_rtsp_message(timeout=10.0)
+        if response:
+            self._debug("<-", response.decode("utf-8", errors="replace"))
         self._running = True
-        return True
+        return response is not None and b"200 OK" in response
 
     def teardown(self):
         if not self.conn or not self.conn.is_connected():
@@ -150,15 +153,10 @@ class RtspProtocol(StreamProtocol):
     def receive_loop(self):
         self.conn.set_timeout(1.0)
         self._rtp_count = 0
-        idle = 0
         while self._running:
             result = self.conn.recv_message(timeout=1.0)
             if result is None:
-                idle += 1
-                if idle >= 10:
-                    break
                 continue
-            idle = 0
             if isinstance(result, tuple):
                 channel, data = result
                 if channel == self.rtp_channel:

@@ -129,9 +129,9 @@ class RtspOverHttpsProtocol(StreamProtocol):
             request += auth_header + "\r\n"
         request += "Range: npt=0.000-\r\n\r\n"
         self._debug("->", "[Base64] " + request.strip())
-        self.tunnel.send_rtsp(request)
+        resp_text = self._send_request(request)
         self._running = True
-        return True
+        return resp_text is not None and "200 OK" in resp_text
 
     def teardown(self):
         if not self.tunnel or not self.tunnel.is_connected():
@@ -152,7 +152,6 @@ class RtspOverHttpsProtocol(StreamProtocol):
 
     def receive_loop(self):
         self._rtp_count = 0
-        idle = 0
         while self._running:
             try:
                 if not self.tunnel or not self.tunnel.is_connected():
@@ -160,11 +159,7 @@ class RtspOverHttpsProtocol(StreamProtocol):
                 self.tunnel.set_timeout(1.0)
                 result = self.tunnel.recv_message(timeout=1.0)
                 if result is None:
-                    idle += 1
-                    if idle >= 10:
-                        break
                     continue
-                idle = 0
                 if isinstance(result, tuple):
                     channel, data = result
                     if channel == self.rtp_channel:
