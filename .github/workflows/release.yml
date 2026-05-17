@@ -93,34 +93,31 @@ jobs:
 
       - name: Prepare release assets
         run: |
-          mv StreamInspector-windows/StreamInspector.exe StreamInspector-v1.0.0-windows.exe
-          mv StreamInspector-linux/StreamInspector StreamInspector-v1.0.0-linux
-          mv StreamInspector-macos/StreamInspector StreamInspector-v1.0.0-macos
-          chmod +x StreamInspector-v1.0.0-linux StreamInspector-v1.0.0-macos
+          VERSION=${{ github.ref_name }}
+          mv StreamInspector-windows/StreamInspector.exe StreamInspector-${VERSION}-windows.exe
+          mv StreamInspector-linux/StreamInspector StreamInspector-${VERSION}-linux
+          mv StreamInspector-macos/StreamInspector StreamInspector-${VERSION}-macos
+          chmod +x StreamInspector-${VERSION}-linux StreamInspector-${VERSION}-macos
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          name: v1.0.0
+          name: ${{ github.ref_name }}
           body: |
-            ## Stream Inspector v1.0.0
+            ## Stream Inspector ${{ github.ref_name }}
 
-            首个正式版本，支持 RTSP / RTSP over HTTP / RTSP over HTTPS 协议视频流抓包分析。
+            RTSP / RTSP over HTTP / RTSP over HTTPS 协议视频流抓包分析工具。
 
             ### 功能
             - 标准 RTSP (端口 554)
             - RTSP over HTTP 隧道 (rtsph://)
             - RTSP over HTTPS 隧道 (rtsps://)
+            - H.264 / H.265 视频解码
             - Digest 认证自动重试
-            - H.264 视频解码播放
-            - 协议报文实时抓包展示
+            - RTP 包头信息实时展示
+            - 协议报文抓包展示
             - 深色主题 UI
-
-            ### 下载
-            - `StreamInspector-v1.0.0-windows.exe`
-            - `StreamInspector-v1.0.0-linux`
-            - `StreamInspector-v1.0.0-macos`
           files: |
-            StreamInspector-v1.0.0-windows.exe
-            StreamInspector-v1.0.0-linux
-            StreamInspector-v1.0.0-macos
+            StreamInspector-${{ github.ref_name }}-windows.exe
+            StreamInspector-${{ github.ref_name }}-linux
+            StreamInspector-${{ github.ref_name }}-macos
