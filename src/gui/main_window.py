@@ -337,7 +337,7 @@ class ProtocolWorker(QObject):
             if not self._aborted:
                 self.error_occurred.emit(str(e))
         finally:
-            if self.protocol and not self._aborted:
+            if self.protocol:
                 try:
                     self.protocol.teardown()
                 except Exception:
@@ -358,11 +358,6 @@ class ProtocolWorker(QObject):
                 self.protocol.stop()
             except Exception:
                 pass
-            try:
-                self.protocol.disconnect()
-            except Exception:
-                pass
-            self.protocol = None
 
     @staticmethod
     def _parse_codec_name(rtpmap: str) -> str:

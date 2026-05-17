@@ -9,6 +9,7 @@ class DebugPanel(QWidget):
         super().__init__(parent)
         self._setup_ui()
         self._auto_scroll = True
+        self._hide_rtp = False
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -28,6 +29,10 @@ class DebugPanel(QWidget):
         self.auto_scroll_cb.setChecked(True)
         self.auto_scroll_cb.toggled.connect(self._on_auto_scroll)
 
+        self.hide_rtp_cb = QCheckBox("隐藏RTP")
+        self.hide_rtp_cb.setChecked(False)
+        self.hide_rtp_cb.toggled.connect(self._on_hide_rtp)
+
         self.clear_btn = QPushButton("清空")
         self.clear_btn.setObjectName("toolButton")
         self.clear_btn.clicked.connect(self.clear)
@@ -39,6 +44,7 @@ class DebugPanel(QWidget):
         header_layout.addWidget(title)
         header_layout.addStretch()
         header_layout.addWidget(self.auto_scroll_cb)
+        header_layout.addWidget(self.hide_rtp_cb)
         header_layout.addWidget(self.clear_btn)
         header_layout.addWidget(self.export_btn)
 
@@ -59,7 +65,12 @@ class DebugPanel(QWidget):
     def _on_auto_scroll(self, checked: bool):
         self._auto_scroll = checked
 
+    def _on_hide_rtp(self, checked: bool):
+        self._hide_rtp = checked
+
     def append_debug(self, direction: str, message: str):
+        if self._hide_rtp and "[RTP" in message:
+            return
         cursor = self.text_edit.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.End)
 

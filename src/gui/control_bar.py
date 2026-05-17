@@ -105,6 +105,8 @@ class ControlBar(QWidget):
         layout.addLayout(addr_layout)
         layout.addLayout(bottom_layout)
 
+        self._on_address_changed(self.addr_combo.currentText())
+
     def _refresh_combo(self):
         current = self.addr_combo.currentText()
         self.addr_combo.blockSignals(True)

@@ -117,45 +117,62 @@ class Connection:
 
     def recv_rtsp_message(self, timeout: float = None) -> bytes | None:
         import time
-        start = time.time()
+        deadline = time.time() + timeout if timeout else None
 
-        while b"\r\n\r\n" not in self.buffer:
-            remaining = timeout - (time.time() - start) if timeout else None
-            if remaining is not None and remaining <= 0:
+        while True:
+            if deadline and time.time() >= deadline:
                 return None
-            if not self.recv_into_buffer():
-                if timeout and (time.time() - start) >= timeout:
+
+            while b"\r\n\r\n" not in self.buffer:
+                remaining = deadline - time.time() if deadline else None
+                if remaining is not None and remaining <= 0:
                     return None
+                if not self.recv_into_buffer():
+                    if deadline and time.time() >= deadline:
+                        return None
+                    continue
+
+            first_byte = self.buffer[0]
+            if first_byte == 0x24:
+                self._drain_interleaved()
                 continue
 
-        header_end = self.buffer.find(b"\r\n\r\n")
-        headers_bytes = self.buffer[:header_end]
-        headers_text = headers_bytes.decode("utf-8", errors="replace")
+            header_end = self.buffer.find(b"\r\n\r\n")
+            headers_bytes = self.buffer[:header_end]
+            headers_text = headers_bytes.decode("utf-8", errors="replace")
 
-        content_length = 0
-        for line in headers_text.split("\r\n"):
-            if line.lower().startswith("content-length:"):
-                try:
-                    content_length = int(line.split(":", 1)[1].strip())
-                except ValueError:
-                    pass
+            content_length = 0
+            for line in headers_text.split("\r\n"):
+                if line.lower().startswith("content-length:"):
+                    try:
+                        content_length = int(line.split(":", 1)[1].strip())
+                    except ValueError:
+                        pass
 
-        total_needed = header_end + 4 + content_length
+            total_needed = header_end + 4 + content_length
 
-        while len(self.buffer) < total_needed:
-            remaining = timeout - (time.time() - start) if timeout else None
-            if remaining is not None and remaining <= 0:
-                return None
-            if not self.recv_into_buffer():
-                return None
+            while len(self.buffer) < total_needed:
+                remaining = deadline - time.time() if deadline else None
+                if remaining is not None and remaining <= 0:
+                    return None
+                if not self.recv_into_buffer():
+                    return None
 
-        message = bytes(self.buffer[:total_needed])
-        self.buffer = self.buffer[total_needed:]
+            message = bytes(self.buffer[:total_needed])
+            self.buffer = self.buffer[total_needed:]
 
-        if self.on_debug_recv:
-            self.on_debug_recv(message)
+            if self.on_debug_recv:
+                self.on_debug_recv(message)
 
-        return message
+            return message
+
+    def _drain_interleaved(self):
+        if len(self.buffer) < 4:
+            return
+        length = struct.unpack(">H", bytes(self.buffer[2:4]))[0]
+        needed = 4 + length
+        if len(self.buffer) >= needed:
+            del self.buffer[:needed]
 
     def recv_interleaved(self, timeout: float = None) -> tuple[int, bytes] | None:
         import time
