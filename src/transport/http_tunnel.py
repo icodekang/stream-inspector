@@ -43,8 +43,10 @@ class HttpTunnel:
 
         get_resp = HttpTunnel._read_http_response(get_conn)
         if get_resp["status"] != 200:
+            raw = get_resp.get("raw", b"")
+            raw_text = raw.decode("utf-8", errors="replace")[:200] if raw else "(no data received)"
             get_conn.disconnect()
-            raise ConnectionError(f"GET tunnel failed: HTTP {get_resp['status']}")
+            raise ConnectionError(f"GET tunnel failed: HTTP {get_resp['status']}, response: {raw_text}")
 
         # --- POST connection (for sending commands to server) ---
         post_conn = Connection(debug_send_cb=debug_send_cb)
@@ -105,9 +107,10 @@ class HttpTunnel:
             if not conn.recv_into_buffer():
                 break
 
+        raw = bytes(conn.buffer)
         idx = conn.buffer.find(b"\r\n\r\n")
         if idx < 0:
-            return {"status": 0, "headers": {}}
+            return {"status": 0, "headers": {}, "raw": raw}
 
         header_bytes = bytes(conn.buffer[:idx])
         del conn.buffer[: idx + 4]
@@ -115,7 +118,7 @@ class HttpTunnel:
         header_text = header_bytes.decode("utf-8", errors="replace")
         lines = header_text.split("\r\n")
         if not lines:
-            return {"status": 0, "headers": {}}
+            return {"status": 0, "headers": {}, "raw": raw}
 
         status_line = lines[0]
         parts = status_line.split(" ")
@@ -127,4 +130,4 @@ class HttpTunnel:
                 key, val = line.split(":", 1)
                 headers[key.strip().lower()] = val.strip()
 
-        return {"status": status, "headers": headers}
+        return {"status": status, "headers": headers, "raw": header_bytes}

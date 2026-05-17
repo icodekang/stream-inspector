@@ -51,6 +51,10 @@ class Connection:
             self.tls_context.check_hostname = False
             self.tls_context.verify_mode = ssl.CERT_NONE
             try:
+                self.tls_context.minimum_version = ssl.TLSVersion.TLSv1
+            except AttributeError:
+                pass
+            try:
                 self.sock = self.tls_context.wrap_socket(self.sock, server_hostname=host)
                 self.sock.settimeout(timeout)
             except Exception as e:
@@ -60,6 +64,11 @@ class Connection:
 
     def abort(self):
         if self.sock:
+            if self.use_tls:
+                try:
+                    self.sock.unwrap()
+                except Exception:
+                    pass
             try:
                 self.sock.shutdown(socket.SHUT_RDWR)
             except Exception:
@@ -94,7 +103,11 @@ class Connection:
             return False
         try:
             chunk = sock.recv(size)
-        except (socket.timeout, BlockingIOError, OSError, AttributeError):
+        except (socket.timeout, BlockingIOError, OSError):
+            return False
+        except AttributeError:
+            return False
+        except ssl.SSLZeroReturnError:
             return False
         if not chunk:
             self.buffer.clear()
