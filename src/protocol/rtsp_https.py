@@ -118,14 +118,16 @@ class RtspOverHttpsProtocol(StreamProtocol):
 
     def play(self) -> bool:
         cseq = self._next_cseq()
+        auth_header = self._build_auth_header("PLAY")
         request = (
             f"PLAY {self._rtsp_url} RTSP/1.0\r\n"
             f"CSeq: {cseq}\r\n"
             f"Session: {self._session or ''}\r\n"
             f"User-Agent: StreamInspector/1.0\r\n"
-            f"Range: npt=0.000-\r\n"
-            f"\r\n"
         )
+        if auth_header:
+            request += auth_header + "\r\n"
+        request += "Range: npt=0.000-\r\n\r\n"
         self._debug("->", "[Base64] " + request.strip())
         self.tunnel.send_rtsp(request)
         self._running = True
