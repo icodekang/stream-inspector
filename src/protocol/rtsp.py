@@ -17,6 +17,7 @@ class RtspProtocol(StreamProtocol):
         self.auth_realm = ""
         self.auth_nonce = ""
         self.auth_qop = None
+        self._auth_nc = 1
         self._rtp_count = 0
 
     def connect(self) -> bool:
@@ -190,9 +191,11 @@ class RtspProtocol(StreamProtocol):
 
             if self.auth_qop:
                 cnonce = hashlib.md5(str(self._cseq).encode()).hexdigest()[:16]
+                nc = f"{self._auth_nc:08x}"
                 response_val = hashlib.md5(
-                    f"{ha1}:{self.auth_nonce}:{self._cseq}:{cnonce}:{self.auth_qop}:{ha2}".encode()
+                    f"{ha1}:{self.auth_nonce}:{nc}:{cnonce}:{self.auth_qop}:{ha2}".encode()
                 ).hexdigest()
+                self._auth_nc += 1
                 return (
                     f'Authorization: Digest username="{self.username}", '
                     f'realm="{self.auth_realm}", '
@@ -200,7 +203,7 @@ class RtspProtocol(StreamProtocol):
                     f'uri="{uri}", '
                     f'response="{response_val}", '
                     f'cnonce="{cnonce}", '
-                    f'nc=00000001, '
+                    f'nc={nc}, '
                     f'qop={self.auth_qop}'
                 )
             else:
@@ -224,3 +227,4 @@ class RtspProtocol(StreamProtocol):
             self.auth_realm = realm_match.group(1)
             self.auth_nonce = nonce_match.group(1)
             self.auth_qop = qop_match.group(1) if qop_match else None
+            self._auth_nc = 1
