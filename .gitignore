@@ -7,5 +7,6 @@ build/
 venv/
 .venv/
 *.spec
+!app.ico
 .DS_Store
 Thumbs.db

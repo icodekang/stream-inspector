@@ -221,7 +221,7 @@ sudo dnf install libxcb xcb-util-cursor libxkbcommon-x11
 
 ```bash
 pip install pyinstaller
-pyinstaller --name "StreamInspector" --windowed --onefile main.py
+pyinstaller --name "StreamInspector" --windowed --onefile --icon=app.ico --add-data "app.ico;." main.py
 ```
 
 生成的可执行文件在 `dist/StreamInspector.exe` (Windows) 或 `dist/StreamInspector` (macOS/Linux)。
