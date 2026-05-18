@@ -52,8 +52,7 @@ python main.py
 
 ```
 PyQt6>=6.5.0          # Qt GUI 框架，提供界面组件和信号/槽机制
-opencv-python>=4.8.0   # 计算机视觉库（当前版本备用，未来可能用于视频处理）
-numpy>=1.24.0          # 数值计算库，PyQt6/OpenCV/PyAV 的底层依赖
+numpy>=1.24.0          # 数值计算库，PyQt6/PyAV 的底层依赖
 av>=10.0.0             # PyAV，FFmpeg 的 Python 绑定，用于 H.264/H.265 视频解码
 ```
 
@@ -135,7 +134,7 @@ python main.py
 
 ```bash
 # 确认所有依赖已安装
-pip list | Select-String "PyQt6|opencv|numpy|av"
+pip list | Select-String "PyQt6|numpy|av"
 
 # 重新安装
 pip install --force-reinstall -r requirements.txt
