@@ -35,7 +35,7 @@
 │                    │  10:23:48 → PLAY ...        │
 │                    │  10:23:48 ← 200 OK          │
 ├────────────────────┴─────────────────────────────┤
-│ ● 已连接 │ RTSP │ 1920x1080 H.264 │ 帧率: 25fps  │  ← 状态栏
+│ ● 已连接 │ RTSP │ 1920x1080 H.264/H.265 │ 帧率: 25fps  │  ← 状态栏
 └──────────────────────────────────────────────────┘
 ```
 
@@ -100,8 +100,8 @@ stream-inspector/
 │   │   ├── connection.py         # TCP/TLS Socket 封装 + 报文拦截
 │   │   └── http_tunnel.py        # HTTP 隧道管理（GET/POST）
 │   ├── stream/                   # 流处理层
-│   │   ├── rtp_parser.py         # RTP 解包 + H.264 重组
-│   │   └── decoder.py            # H.264 → Qt 帧解码
+│   │   ├── rtp_parser.py         # RTP 解包 + H.264/H.265 重组
+│   │   └── decoder.py            # H.264/H.265 → Qt 帧解码
 │   └── debug/                    # 调试层
 │       ├── models.py             # 调试数据模型
 │       └── logger.py             # 调试日志记录器

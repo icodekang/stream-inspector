@@ -271,7 +271,7 @@ ProtocolWorker.run()
 
 ### 为什么用 PyAV 而非 OpenCV VideoCapture
 
-- OpenCV 的 `VideoCapture` 不支持直接输入原始 H.264 字节流
+- OpenCV 的 `VideoCapture` 不支持直接输入原始 H.264/H.265 字节流
 - PyAV 提供细粒度控制：`parse()` → `decode()` 分步执行，便于调试
 - PyAV 基于 FFmpeg，编解码器支持全面
 

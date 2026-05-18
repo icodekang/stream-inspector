@@ -54,7 +54,7 @@ python main.py
 PyQt6>=6.5.0          # Qt GUI 框架，提供界面组件和信号/槽机制
 opencv-python>=4.8.0   # 计算机视觉库（当前版本备用，未来可能用于视频处理）
 numpy>=1.24.0          # 数值计算库，PyQt6/OpenCV/PyAV 的底层依赖
-av>=10.0.0             # PyAV，FFmpeg 的 Python 绑定，用于 H.264 视频解码
+av>=10.0.0             # PyAV，FFmpeg 的 Python 绑定，用于 H.264/H.265 视频解码
 ```
 
 `PyQt6` 包含以下自动安装的子包：
@@ -143,15 +143,15 @@ pip install --force-reinstall -r requirements.txt
 
 ### 问题：视频解码报错
 
-**原因**：PyAV 缺少 H.264 解码器或 FFmpeg 版本问题。
+**原因**：PyAV 缺少 H.264/H.265 解码器或 FFmpeg 版本问题。
 
 **解决**：
 
 ```bash
 # 检查 av 是否正常导入
-python -c "import av; print(av.codecs_available)" | Select-String "h264"
+python -c "import av; print(av.codecs_available)" | Select-String "h264|hevc"
 
-# 如没有 h264 解码器，重新安装 av
+# 如没有 h264/hevc 解码器，重新安装 av
 pip uninstall av
 pip install av --no-cache-dir
 ```
