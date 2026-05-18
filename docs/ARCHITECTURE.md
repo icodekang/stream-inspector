@@ -18,7 +18,8 @@
 ├─────────┼──────────────────┼────────────────────────────┤
 │  Protocol Layer            │  Stream Layer              │
 │  base.py rtsp.py           │  rtp_parser.py            │
-│  rtsp_http.py              │  decoder.py               │
+│  rtsp_tls.py               │  decoder.py               │
+│  rtsp_http.py              │                            │
 │  rtsp_https.py             │                            │
 │  factory.py                │                            │
 │         │                  │                            │
@@ -112,6 +113,16 @@ stream_info_callback  # (info: dict) -> None
   4. `play()` — 请求开始推流 `Range: npt=0.000-`
   5. `receive_loop()` — 循环读取 Interleaved RTP 数据
 
+#### rtsp_tls.py — RtspOverTlsProtocol
+
+RTSP over TLS 协议实现：
+
+- **继承**：`RtspProtocol`，复用全部 RTSP 逻辑
+- **差异**：`connect()` 中通过 `use_tls=True` 建立 TLS 加密直连
+- **默认端口**：322（IANA 注册 rtsps 端口）
+- **传输**：不经过 HTTP 隧道，RTSP 命令直接在 TLS 通道上传输
+- **调试**：连接阶段记录 TLS 握手状态
+
 #### rtsp_http.py — RtspOverHttpProtocol
 
 RTSP over HTTP 协议实现：
@@ -122,19 +133,20 @@ RTSP over HTTP 协议实现：
 
 #### rtsp_https.py — RtspOverHttpsProtocol
 
-RTSP over HTTPS 协议实现：
+RTSP over HTTPS 协议实现 (`rtsphs://`)：
 
 - 继承 RTSP over HTTP 的所有逻辑
-- `connect()` 中通过 `use_tls=True` 建立 TLS 加密连接
+- `connect()` 中通过 `use_tls=True` 建立 TLS 加密的 HTTP 隧道
 - 调试面板记录 TLS 握手状态
 
 #### factory.py — 协议工厂
 
 ```python
 PROTOCOL_MAP = {
-    "rtsp":  RtspProtocol,
-    "rtsph": RtspOverHttpProtocol,
-    "rtsps": RtspOverHttpsProtocol,
+    "rtsp":   RtspProtocol,
+    "rtsps":  RtspOverTlsProtocol,
+    "rtsph":  RtspOverHttpProtocol,
+    "rtsphs": RtspOverHttpsProtocol,
 }
 
 def create_protocol(url: str) -> StreamProtocol | None:
@@ -145,30 +157,33 @@ def create_protocol(url: str) -> StreamProtocol | None:
 
 #### rtp_parser.py — RtpParser
 
-RTP 包解析器，支持 H.264 载荷类型：
+RTP 包解析器，支持 H.264 和 H.265 载荷类型：
 
 - **RTP 头部解析**：Version(2), Padding(1), Extension(1), CSRC Count(4), Marker(1), Payload Type(7), Sequence(16), Timestamp(32), SSRC(32)
+- **Padding 处理**：自动剥离 RTP 尾部的 padding 字节
 - **H.264 NAL 类型识别**：
   - 1-23: 单 NAL 单元
   - 24 (STAP-A): 聚合包，包含多个 NAL 单元
   - 28 (FU-A): 分片单元，需重组
-- **FU-A 重组**：
-  - `start_bit=1`: 开始累积，记录原始 NAL header
-  - 中间分片: 追加数据
-  - `end_bit=1`: 输出完整帧并重置状态
+- **H.265 NAL 类型识别**：
+  - 0-47: 单 NAL 单元
+  - 48 (AP): 聚合包
+  - 49 (FU): 分片单元
+- **Fragment 状态管理**：收到非分片包时自动清空未完成的分片缓冲区，避免因丢包导致重组状态卡死
 - **Annex-B 封装**：每个完整帧前添加 `00 00 00 01` 起始码
 
 #### decoder.py — VideoDecoder
 
-H.264 视频解码器：
+H.264 / H.265 视频解码器：
 
 - **解码后端**：PyAV (`av.CodecContext`)
 - **流程**：
-  1. `codec.parse(annexb_data)` — 解析 Annex-B 格式的 H.264 数据
+  1. `codec.parse(annexb_data)` — 解析 Annex-B 格式数据
   2. `codec.decode(packet)` — 解码为原始帧
   3. `frame.to_ndarray(format='rgb24')` — 转换为 NumPy 数组
-  4. `QImage(data, w, h, bpl, Format_RGB888)` — 封装为 Qt 图像
+  4. `QImage(data, w, h, bpl, Format_RGB888).copy()` — 深拷贝封装为 Qt 图像
   5. `QPixmap.fromImage(qimage)` — 可显示的像素图
+- **调试回调**：解码器初始化失败、连续未产出帧、解码异常时通过回调输出到调试面板
 
 ### 4. GUI 层 (gui/)
 
@@ -186,7 +201,9 @@ H.264 视频解码器：
   ```
   ProtocolWorker.debug_message  → debug_panel.append_debug
   ProtocolWorker.video_data     → DecodeWorker.process_data
+  ProtocolWorker.codec_changed  → DecodeWorker.set_codec
   DecodeWorker.frame_ready      → video_panel.show_frame
+  DecodeWorker.debug_message    → debug_panel.append_debug
   ProtocolWorker.status_changed → 状态栏更新
   ProtocolWorker.error_occurred → 错误提示
   ProtocolWorker.stream_info    → 视频面板编码信息
@@ -242,9 +259,8 @@ ProtocolWorker.run()
                                                        RtpParser.parse(data)
                                                        VideoDecoder.decode(frame)
                                                               │
-                                                    frame_ready(pixmap) signal
-                                                              │
-                                                       video_panel.show_frame()
+                                                    frame_ready(pixmap) signal ──→ video_panel
+                                                    debug_message signal      ──→ debug_panel (解码警告/错误)
 ```
 
 ## 关键设计决策

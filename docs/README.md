@@ -1,6 +1,6 @@
 # Stream Inspector
 
-流媒体调试工具，支持 RTSP / RTSP over HTTP / RTSP over HTTPS 三种取流协议，提供视频实时预览和协议报文调试功能。
+流媒体调试工具，支持 RTSP / RTSP over TLS / RTSP over HTTP / RTSP over HTTPS 四种取流协议，提供视频实时预览和协议报文调试功能。
 
 ## 功能特性
 
@@ -9,8 +9,9 @@
 | URL Scheme | 协议 | 默认端口 | 传输方式 |
 |------------|------|---------|----------|
 | `rtsp://` | 标准 RTSP (RFC 2326) | 554 | TCP 直连，RTP over TCP (interleaved) |
+| `rtsps://` | RTSP over TLS | 322 | TLS 加密直连，RTP over TCP (interleaved) |
 | `rtsph://` | RTSP over HTTP | 80 | HTTP 隧道 (GET/POST)，Base64 封装 |
-| `rtsps://` | RTSP over HTTPS | 443 | TLS + HTTP 隧道，Base64 封装 |
+| `rtsphs://` | RTSP over HTTPS | 443 | TLS + HTTP 隧道，Base64 封装 |
 
 ### 界面布局
 
@@ -59,7 +60,7 @@
 - 完整记录 RTSP 请求/响应（OPTIONS → DESCRIBE → SETUP → PLAY → TEARDOWN）
 - 展示 SDP 描述信息（视频编码、轨道信息）
 - RTSP over HTTP/HTTPS 模式下显示 HTTP 隧道建立过程和 Base64 编解码日志
-- HTTPS 模式下显示 TLS 握手状态
+- TLS 模式下显示 TLS 握手状态
 - 支持 Digest 认证（自动处理 401 响应并重试）
 - **清空** 按钮重置调试面板
 - **导出** 按钮将调试日志保存为文本文件
@@ -68,7 +69,9 @@
 
 - RTP 解包：支持 interleaved (TCP) 模式
 - H.264 重组：处理 FU-A（分片单元）、STAP-A（聚合单元）、单 NAL 单元
-- 解码器：PyAV (FFmpeg) 硬解 H.264 → RGB24 → QPixmap
+- H.265 重组：处理 FU（分片单元）、AP（聚合单元）、单 NAL 单元
+- 解码器：PyAV (FFmpeg) 硬解 H.264/H.265 → RGB24 → QPixmap
+- 解码异常自动输出到调试面板，便于排查编码不匹配问题
 
 ## 项目架构
 
@@ -89,6 +92,7 @@ stream-inspector/
 │   ├── protocol/                 # 协议层（可扩展）
 │   │   ├── base.py               # 抽象基类 StreamProtocol
 │   │   ├── rtsp.py               # 标准 RTSP 客户端
+│   │   ├── rtsp_tls.py           # RTSP over TLS 客户端
 │   │   ├── rtsp_http.py          # RTSP over HTTP 客户端
 │   │   ├── rtsp_https.py         # RTSP over HTTPS 客户端
 │   │   └── factory.py            # 协议工厂（scheme → 协议类映射）
@@ -116,9 +120,11 @@ Main Thread (UI)
     │                ──→ video_panel (码流数据)
     │
     └── DecodeWorker (QThread)
-        ├── RTP 解包 + H.264 重组
+        ├── RTP 解包 + H.264/H.265 重组
         ├── PyAV 解码 → QPixmap
+        ├── 解码异常自动输出到调试面板
         └── Signal ──→ video_panel (渲染帧)
+                       ──→ debug_panel (解码警告/错误)
 ```
 
 ## 扩展指南
@@ -130,8 +136,9 @@ Main Thread (UI)
    ```python
    PROTOCOL_MAP = {
        "rtsp": RtspProtocol,
+       "rtsps": RtspOverTlsProtocol,
        "rtsph": RtspOverHttpProtocol,
-       "rtsps": RtspOverHttpsProtocol,
+       "rtsphs": RtspOverHttpsProtocol,
        "rtmp": RtmpProtocol,  # 新增
    }
    ```
@@ -145,7 +152,7 @@ Main Thread (UI)
 
 ### Q: 视频不显示但有调试信息
 
-检查调试面板中 SETUP 响应是否成功（200 OK），确认视频编码格式为 H.264（暂不支持 H.265/MPEG4）。
+检查调试面板中 SETUP 响应是否成功（200 OK），确认视频编码格式为 H.264 或 H.265。若调试面板出现解码器初始化失败或解码异常提示，说明编码格式不兼容或 PyAV/FFmpeg 缺少相应解码器。
 
 ### Q: 认证失败
 
