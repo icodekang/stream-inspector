@@ -67,6 +67,11 @@ class RtpParser:
 
         nal_data = data[offset:]
 
+        if has_padding and len(nal_data) > 0:
+            padding_len = nal_data[-1]
+            if 0 < padding_len <= len(nal_data):
+                nal_data = nal_data[:-padding_len]
+
         if len(nal_data) == 0:
             return []
 
@@ -80,6 +85,7 @@ class RtpParser:
         nal_type = nal_data[0] & 0x1F
 
         if nal_type == self.NAL_TYPE_STAP_A:
+            self._reset_fragments_if_needed()
             pos = 1
             while pos + 2 <= len(nal_data):
                 nalu_size = struct.unpack(">H", nal_data[pos:pos + 2])[0]
@@ -111,6 +117,7 @@ class RtpParser:
                 frames.append(frame)
                 self._fragments.clear()
         else:
+            self._reset_fragments_if_needed()
             frame = self._make_annexb(nal_data)
             frames.append(frame)
 
@@ -124,6 +131,7 @@ class RtpParser:
         nal_type = (nal_data[0] >> 1) & 0x3F
 
         if nal_type == self.NAL_TYPE_AP:
+            self._reset_fragments_if_needed()
             pos = 2
             while pos + 2 <= len(nal_data):
                 nalu_size = struct.unpack(">H", nal_data[pos:pos + 2])[0]
@@ -159,10 +167,16 @@ class RtpParser:
                 frames.append(frame)
                 self._fragments.clear()
         else:
+            self._reset_fragments_if_needed()
             frame = self._make_annexb(nal_data)
             frames.append(frame)
 
         return frames
+
+    def _reset_fragments_if_needed(self):
+        if self._fragmenting:
+            self._fragmenting = False
+            self._fragments.clear()
 
     def _make_annexb(self, nalu: bytes) -> bytes:
         return b"\x00\x00\x00\x01" + nalu

@@ -387,12 +387,16 @@ class ProtocolWorker(QObject):
 
 class DecodeWorker(QObject):
     frame_ready = pyqtSignal(QPixmap)
+    debug_message = pyqtSignal(str, str)
 
     def __init__(self):
         super().__init__()
         self.parser = RtpParser()
-        self.decoder = VideoDecoder()
-        self._running = False
+        self.decoder = VideoDecoder(debug_callback=self._on_decoder_debug)
+        self._running = True
+
+    def _on_decoder_debug(self, direction: str, message: str):
+        self.debug_message.emit(direction, message)
 
     @pyqtSlot(str)
     def set_codec(self, codec_name: str):
@@ -409,8 +413,8 @@ class DecodeWorker(QObject):
                 pixmap = self.decoder.decode(frame)
                 if pixmap:
                     self.frame_ready.emit(pixmap)
-        except Exception:
-            pass
+        except Exception as e:
+            self.debug_message.emit("!!", f"数据处理异常: {e}")
 
     @pyqtSlot()
     def start_decoding(self):
@@ -498,6 +502,7 @@ class MainWindow(QMainWindow):
         self._protocol_worker.video_data.connect(self._decode_worker.process_data)
         self._protocol_worker.codec_changed.connect(self._decode_worker.set_codec)
         self._decode_worker.frame_ready.connect(self._on_frame_ready)
+        self._decode_worker.debug_message.connect(self._on_debug_message)
 
         self._protocol_thread.start()
         self._decode_thread.start()

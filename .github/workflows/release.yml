@@ -106,12 +106,13 @@ jobs:
           body: |
             ## Stream Inspector ${{ github.ref_name }}
 
-            RTSP / RTSP over HTTP / RTSP over HTTPS 协议视频流抓包分析工具。
+            RTSP / RTSP over TLS / RTSP over HTTP / RTSP over HTTPS 协议视频流抓包分析工具。
 
             ### 功能
             - 标准 RTSP (端口 554)
+            - RTSP over TLS 加密传输 (rtsps://, 端口 322)
             - RTSP over HTTP 隧道 (rtsph://)
-            - RTSP over HTTPS 隧道 (rtsps://)
+            - RTSP over HTTPS 隧道 (rtsphs://)
             - H.264 / H.265 视频解码
             - Digest 认证自动重试
             - RTP 包头信息实时展示

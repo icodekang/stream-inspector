@@ -2,12 +2,14 @@ from .base import StreamProtocol
 from .rtsp import RtspProtocol
 from .rtsp_http import RtspOverHttpProtocol
 from .rtsp_https import RtspOverHttpsProtocol
+from .rtsp_tls import RtspOverTlsProtocol
 
 
 PROTOCOL_MAP = {
     "rtsp": RtspProtocol,
     "rtsph": RtspOverHttpProtocol,
-    "rtsps": RtspOverHttpsProtocol,
+    "rtsps": RtspOverTlsProtocol,
+    "rtsphs": RtspOverHttpsProtocol,
 }
 
 
@@ -29,6 +31,7 @@ def get_protocol_name(scheme: str) -> str:
     names = {
         "rtsp": "RTSP",
         "rtsph": "RTSP over HTTP",
-        "rtsps": "RTSP over HTTPS",
+        "rtsps": "RTSP over TLS",
+        "rtsphs": "RTSP over HTTPS",
     }
     return names.get(scheme, scheme.upper())
